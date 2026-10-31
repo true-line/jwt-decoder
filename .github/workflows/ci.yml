@@ -6,7 +6,7 @@ on:
   pull_request:
 
 # The default for every job: check out and write nothing. A job that needs
-# more asks at its own call site — `codeql` is the only job here, and only
+# more asks at its own call site — `codeql` is the only one that does, and only
 # for the SARIF upload (ENG-0149).
 permissions:
   contents: read
@@ -16,6 +16,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The pure modules carry their own assertions; this is the gate that makes a
+  # change to src/ verifiable before review rather than after it.
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Unit tests
+        run: npm test
+
   # Advanced CodeQL, invoked from this repository's own workflow rather than
   # GitHub's default setup. Default setup runs as the unselectable
   # `github-advanced-security[bot]` actor and sits outside the Actions Policy.

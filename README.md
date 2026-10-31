@@ -15,6 +15,16 @@ The popup is `popup.html`. Decoder logic lives in `src/`.
 
 There is no build step. Edit the source files and reload the extension.
 
+The decoder and the highlighter are pure modules with a Node test suite, so no
+browser is needed to check them:
+
+```bash
+npm test        # node --test test/
+```
+
+`src/ui-controller.js` is the only module that touches the DOM; changes there
+are checked by loading the extension unpacked.
+
 ## License
 
 MIT. See `LICENSE`.
