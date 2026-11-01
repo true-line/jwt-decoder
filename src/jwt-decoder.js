@@ -55,13 +55,25 @@ export function decode(token) {
 }
 
 /**
+ * A claim past 2100 is far more likely a milliseconds timestamp pasted into a
+ * seconds field than a real expiry. Showing it is honest; badging it "Valid"
+ * would be a wrong answer.
+ */
+const MAX_PLAUSIBLE_EPOCH_SECONDS = 4_102_444_800; // 2100-01-01T00:00:00Z
+
+/**
  * Extracts well-known numeric timestamp claims from a JWT payload and
  * returns them in a display-ready form.
  *
  * Recognised claims: iat (Issued At), exp (Expires), nbf (Not Before).
  *
+ * `status` is the one fact the panel needs, and only `exp` can carry it:
+ * `'expired'` or `'valid'` for a plausible epoch, `null` otherwise (other
+ * claims, implausible units). Claims whose value is not a finite number are
+ * dropped rather than rendered as an Invalid Date.
+ *
  * @param {object} payload
- * @returns {Array<{ field: string, label: string, date: Date, isExpired: boolean, isValid: boolean }>}
+ * @returns {Array<{ field: string, label: string, date: Date, status: 'expired' | 'valid' | null }>}
  */
 export function extractTimestampClaims(payload) {
   const KNOWN = {
@@ -73,11 +85,19 @@ export function extractTimestampClaims(payload) {
   const now = Date.now();
 
   return Object.entries(KNOWN)
-    .filter(([field]) => typeof payload[field] === 'number')
+    .filter(([field]) => Number.isFinite(payload[field]))
     .map(([field, label]) => {
-      const date = new Date(payload[field] * 1000);
-      const isExpired = field === 'exp' && date.getTime() < now;
-      const isValid   = field === 'exp' && date.getTime() >= now;
-      return { field, label, date, isExpired, isValid };
+      const seconds = payload[field];
+      const date = new Date(seconds * 1000);
+      const plausible = Math.abs(seconds) <= MAX_PLAUSIBLE_EPOCH_SECONDS;
+
+      return {
+        field,
+        label,
+        date,
+        status: field === 'exp' && plausible
+          ? (date.getTime() < now ? 'expired' : 'valid')
+          : null,
+      };
     });
 }

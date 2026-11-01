@@ -35,6 +35,28 @@ function renderSignature(pre, signature) {
   rawTextStore.set(pre.id, signature);
 }
 
+const CLAIM_BADGES = {
+  expired: '<span class="claim-badge claim-badge--expired">Expired</span>',
+  valid:   '<span class="claim-badge claim-badge--valid">Valid</span>',
+};
+
+/**
+ * Builds the claims panel markup for already-extracted claims. Both the label
+ * and the badge come from fixed tables, so no claim value reaches the markup.
+ *
+ * @param {Array<{ field: string, label: string, date: Date, status: string | null }>} claims
+ * @returns {string} HTML
+ */
+export function claimsPanelHtml(claims) {
+  return claims
+    .map(({ field, label, date, status }) => `<div class="claim-row">
+        <span class="claim-field" title="${field}">${label}</span>
+        <span class="claim-date">${date.toUTCString()}</span>
+        ${CLAIM_BADGES[status] ?? ''}
+      </div>`)
+    .join('');
+}
+
 /**
  * Populates the claims panel with human-readable timestamp information for
  * the well-known JWT claims iat, exp, and nbf.
@@ -46,26 +68,7 @@ function renderSignature(pre, signature) {
 function renderClaimsPanel(panel, payload) {
   const claims = extractTimestampClaims(payload);
 
-  if (claims.length === 0) {
-    panel.innerHTML = '';
-    return;
-  }
-
-  panel.innerHTML = claims
-    .map(({ field, date, isExpired, isValid }) => {
-      const badge = isExpired
-        ? '<span class="claim-badge claim-badge--expired">Expired</span>'
-        : isValid
-        ? '<span class="claim-badge claim-badge--valid">Valid</span>'
-        : '';
-
-      return `<div class="claim-row">
-        <span class="claim-field">${field}</span>
-        <span class="claim-date">${date.toUTCString()}</span>
-        ${badge}
-      </div>`;
-    })
-    .join('');
+  panel.innerHTML = claims.length === 0 ? '' : claimsPanelHtml(claims);
 }
 
 // ─── Event handlers ───────────────────────────────────────────────────────────
