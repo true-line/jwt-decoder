@@ -16,12 +16,17 @@ function el(id) { return document.getElementById(id); }
 /**
  * Writes syntax-highlighted JSON into a <pre> element and caches the raw text.
  *
+ * The cached text is the serialisation `highlight` already produced, so the
+ * copied string and the rendered string cannot drift apart.
+ *
  * @param {HTMLPreElement} pre
  * @param {object}         data
  */
-function renderJson(pre, data) {
-  pre.innerHTML = highlight(data);
-  rawTextStore.set(pre.id, JSON.stringify(data, null, 2));
+export function renderJson(pre, data) {
+  const { html, raw } = highlight(data);
+
+  pre.innerHTML = html;
+  rawTextStore.set(pre.id, raw);
 }
 
 /**
@@ -110,13 +115,34 @@ function handleInput(input, els) {
   }
 }
 
+// Label-reset timers, keyed by button so a second click cancels the pending
+// restore instead of stampeding the label back to "Copy" mid-write.
+const labelResets = new WeakMap();
+
+/**
+ * Resolves the copy button an event should act on. Delegation must survive a
+ * button that contains a child node (an icon, an inline `<svg>`), so the
+ * nearest matching ancestor is the answer, not the click target itself.
+ *
+ * @param {EventTarget} target
+ * @returns {HTMLButtonElement | null}
+ */
+export function copyButtonFrom(target) {
+  return target?.closest?.('.copy-btn') ?? null;
+}
+
 /**
  * Copies the raw text for the target block to the clipboard.
  * Provides brief visual feedback on the button ("Copied!" / "Error").
  *
+ * The pending restore is cancelled on entry, not after the write settles: a
+ * second click during a slow write must not have the first click's timer flip
+ * the label back to "Copy" while that write is still in flight.
+ *
  * @param {HTMLButtonElement} btn
  */
-async function handleCopy(btn) {
+export async function handleCopy(btn) {
+  clearTimeout(labelResets.get(btn));
   const text = rawTextStore.get(btn.dataset.copyTarget) ?? '';
 
   try {
@@ -126,10 +152,10 @@ async function handleCopy(btn) {
   } catch {
     btn.textContent = 'Error';
   } finally {
-    setTimeout(() => {
+    labelResets.set(btn, setTimeout(() => {
       btn.textContent = 'Copy';
       btn.classList.remove('is-copied');
-    }, 1500);
+    }, 1500));
   }
 }
 
@@ -172,8 +198,7 @@ export function init() {
 
   // Copy buttons — handled via event delegation on the document
   document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('copy-btn')) {
-      handleCopy(e.target);
-    }
+    const btn = copyButtonFrom(e.target);
+    if (btn) handleCopy(btn);
   });
 }

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import { highlight } from '../src/json-formatter.js';
 
+const markup = (value) => highlight(value).html;
+
 /** Pairs of [class, escaped token] in document order. */
 const spans = (html) =>
   [...html.matchAll(/<span class="([^"]+)">([\s\S]*?)<\/span>/g)].map((m) => [m[1], m[2]]);
@@ -18,7 +20,7 @@ const stripMarkup = (html) =>
     .replace(/&amp;/g, '&');
 
 test('escapes HTML significant characters in keys and values', () => {
-  const html = highlight({ '<tag>': 'a & b <script>x</script>' });
+  const html = markup({ '<tag>': 'a & b <script>x</script>' });
 
   assert.ok(!html.includes('<script'), 'a script tag reached the DOM');
   assert.ok(html.includes('&lt;tag&gt;'));
@@ -28,20 +30,28 @@ test('escapes HTML significant characters in keys and values', () => {
 test('matched and unmatched slices together reproduce the serialised JSON', () => {
   const value = { a: [1, 'two', { deep: null }], '<b>': '<&>' };
 
-  assert.equal(stripMarkup(highlight(value)), JSON.stringify(value, null, 2));
+  assert.equal(stripMarkup(markup(value)), JSON.stringify(value, null, 2));
+});
+
+test('returns the same serialisation the markup renders', () => {
+  const value = { payload: 'a & b', list: [1, '<'] };
+  const { html, raw } = highlight(value);
+
+  assert.equal(stripMarkup(html), raw);
+  assert.equal(raw, JSON.stringify(value, null, 2));
 });
 
 test('a string value that looks like a key stays a string', () => {
-  assert.deepEqual(classNames(highlight({ note: '"fake": 1' })), ['json-key', 'json-string']);
+  assert.deepEqual(classNames(markup({ note: '"fake": 1' })), ['json-key', 'json-string']);
   assert.deepEqual(
-    classNames(highlight({ 'trailing:': 'colon value:' })),
+    classNames(markup({ 'trailing:': 'colon value:' })),
     ['json-key', 'json-string']
   );
 });
 
 test('classifies primitives', () => {
   assert.deepEqual(
-    classNames(highlight({ n: 1.5, big: 1e21, t: true, f: false, z: null, s: 'x' })),
+    classNames(markup({ n: 1.5, big: 1e21, t: true, f: false, z: null, s: 'x' })),
     [
       'json-key', 'json-number',
       'json-key', 'json-number',
@@ -54,32 +64,30 @@ test('classifies primitives', () => {
 });
 
 test('exponential numbers stay one token', () => {
-  assert.equal(spans(highlight([1e21]))[0][1], '1e+21');
+  assert.equal(spans(markup([1e21]))[0][1], '1e+21');
 });
 
 test('negative numbers keep their sign inside the number token', () => {
-  assert.deepEqual(spans(highlight({ n: -4.25 })), [
+  assert.deepEqual(spans(markup({ n: -4.25 })), [
     ['json-key', '"n":'],
     ['json-number', '-4.25'],
   ]);
 });
 
 test('empty containers produce no tokens but keep their braces', () => {
-  assert.equal(spans(highlight({})).length, 0);
-  assert.equal(highlight({}), '{}');
-  assert.equal(spans(highlight([])).length, 0);
-  assert.equal(highlight([]), '[]');
+  assert.equal(spans(markup({})).length, 0);
+  assert.equal(markup({}), '{}');
+  assert.equal(spans(markup([])).length, 0);
+  assert.equal(markup([]), '[]');
 });
 
 test('preserves nesting, ordering, and unicode keys', () => {
-  const pairs = spans(highlight({ '日本': [{ deep: true }] }));
+  const value = { '日本': [{ deep: true }] };
+  const pairs = spans(markup(value));
 
   assert.deepEqual(pairs.map((p) => p[0]), ['json-key', 'json-key', 'json-boolean']);
   assert.equal(pairs[0][1], '"日本":');
-  assert.ok(
-    stripMarkup(highlight({ '日本': [{ deep: true }] })).includes('\n      "deep": true'),
-    'nested indentation was not preserved'
-  );
+  assert.ok(stripMarkup(markup(value)).includes('\n      "deep": true'), 'nested indentation');
 });
 
 test('repeated and interleaved calls do not leak scan state between calls', () => {
@@ -89,6 +97,6 @@ test('repeated and interleaved calls do not leak scan state between calls', () =
   const other = highlight({ z: 9 });
   const again = highlight(value);
 
-  assert.equal(again, first);
-  assert.notEqual(other, first);
+  assert.deepEqual(again, first);
+  assert.notDeepEqual(other, first);
 });
