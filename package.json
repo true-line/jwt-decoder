@@ -1,8 +1,11 @@
 {
   "name": "jwt-decoder",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "check:version": "node scripts/check-version-policy.mjs",
+    "package:release": "node scripts/package-release.mjs"
   }
 }
