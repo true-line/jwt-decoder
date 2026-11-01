@@ -65,6 +65,7 @@ test('extracts the well-known claims in a stable order', () => {
   });
 
   assert.deepEqual(rows.map((row) => row.field), ['iat', 'exp', 'nbf']);
+  assert.deepEqual(rows.map((row) => row.label), ['Issued At', 'Expires', 'Not Before']);
   rows.forEach((row, index) => {
     assert.equal(row.date.getTime(), [issued, issued + 100, issued + 200][index] * 1000);
   });
@@ -73,4 +74,25 @@ test('extracts the well-known claims in a stable order', () => {
 test('ignores absent and non-numeric claims', () => {
   assert.deepEqual(extractTimestampClaims({ sub: '1' }), []);
   assert.deepEqual(extractTimestampClaims({ iat: '1700000000', exp: null }), []);
+});
+
+test('drops non-finite claims rather than rendering an Invalid Date row', () => {
+  // typeof NaN === 'number', so a NaN claim used to survive the filter and
+  // reach the panel as a row reading "Invalid Date".
+  assert.deepEqual(extractTimestampClaims({ iat: NaN, exp: Infinity, nbf: -Infinity }), []);
+});
+
+test('badges only exp, with one status per row', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const rows = extractTimestampClaims({ iat: now - 60, nbf: now + 60, exp: now - 1 });
+
+  assert.deepEqual(rows.map((row) => row.status), [null, 'expired', null]);
+  assert.equal(extractTimestampClaims({ exp: now + 3600 })[0].status, 'valid');
+});
+
+test('refuses to badge an epoch too large to be seconds', () => {
+  const rows = extractTimestampClaims({ exp: Date.now() }); // milliseconds, not seconds
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, null, 'a milliseconds timestamp must not read as Valid');
 });
