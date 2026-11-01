@@ -48,39 +48,40 @@ function tokenClass(token) {
 }
 
 /**
- * Converts a JSON-serialisable value to a syntax-highlighted HTML string
- * that is safe to assign to `element.innerHTML`.
+ * Converts a JSON-serialisable value into highlighted HTML plus the exact
+ * serialisation that HTML was built from.
  *
  * Strategy:
  *   - Serialise the value with JSON.stringify for consistent pretty-printing.
- *   - Walk the string with TOKEN_PATTERN, wrapping each token in a <span>.
+ *   - Walk the string with String.prototype.matchAll, wrapping each token in a
+ *     <span>. matchAll clones the pattern, so the module-level regex never
+ *     carries scan state between calls.
  *   - HTML-escape every slice (matched and unmatched) to prevent XSS.
  *
+ * `raw` is returned so callers that need the plain text (the clipboard) use the
+ * same serialisation the DOM shows instead of producing a second, drifting copy.
+ *
  * @param {unknown} value - Any JSON-serialisable value
- * @returns {string} HTML string
+ * @returns {{ html: string, raw: string }}
  */
 export function highlight(value) {
   const raw = JSON.stringify(value, null, 2);
 
-  let output    = '';
-  let lastIndex = 0;
-  let match;
+  let html   = '';
+  let cursor = 0;
 
-  // Reset the regex's stateful lastIndex before iterating
-  TOKEN_PATTERN.lastIndex = 0;
+  for (const match of raw.matchAll(TOKEN_PATTERN)) {
+    const token = match[0];
 
-  while ((match = TOKEN_PATTERN.exec(raw)) !== null) {
     // Structural characters between tokens (braces, brackets, commas, whitespace)
-    output += escapeHtml(raw.slice(lastIndex, match.index));
+    html += escapeHtml(raw.slice(cursor, match.index));
+    html += `<span class="${tokenClass(token)}">${escapeHtml(token)}</span>`;
 
-    // The token itself, highlighted
-    output += `<span class="${tokenClass(match[0])}">${escapeHtml(match[0])}</span>`;
-
-    lastIndex = TOKEN_PATTERN.lastIndex;
+    cursor = match.index + token.length;
   }
 
   // Any trailing structural characters after the last token
-  output += escapeHtml(raw.slice(lastIndex));
+  html += escapeHtml(raw.slice(cursor));
 
-  return output;
+  return { html, raw };
 }
